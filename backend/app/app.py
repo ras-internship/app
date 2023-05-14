@@ -33,8 +33,15 @@ def predict(data: InputData):
     logger.warn(pre_shape)
     y = len(data.input) // reduce(lambda x, y: x * y, pre_shape)
 
-    input_data = np.array(data.input).reshape((y, *pre_shape))
-    prediction = model.predict(input_data)
+    try:
+        input_data = np.array(data.input).reshape((y, *pre_shape))
+    except:
+        return {"error": "Invalid input shape"}
+
+    try:
+        prediction = model.predict(input_data)
+    except:
+        return {"error": "Invalid predictions"}
 
     # Return the prediction
     return {"prediction": prediction.tolist()}
