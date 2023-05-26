@@ -12,6 +12,7 @@ import io
 
 import base64
 from datetime import datetime
+from dateutil.relativedelta import relativedelta
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
@@ -35,26 +36,35 @@ window_size = 12
 start_ahead = 5
 steps_ahead = 6
 
-def prepare_data(pdX1) -> np.array:
+def prediction(model, pdX1):
     Xin = pdX1.iloc[:, 1:]
-    scalerX_VVP = StandardScaler()
-    scaled_dataX = scalerX_VVP.fit_transform(Xin)
-    X_data = []
-    for i in range(len(scaled_dataX) - window_size - steps_ahead ):
-        X_data.append(scaled_dataX[i:i + window_size])
-    return np.array(X_data)
+    scalerX = StandardScaler()
+    scaled_dataX = scalerX.fit_transform(Xin)
 
-def prediction(model, npdata):
+    scalerY = StandardScaler()
+    scalerY.mean_ = scalerX.mean_[0].reshape(-1, 1)
+    scalerY.var_ = scalerX.var_[0].reshape(-1, 1)
+    scalerY.scale_ = scalerX.scale_[0].reshape(-1, 1)
+
+    X_data = []
+    for i in range(len(scaled_dataX) - window_size ):
+        X_data.append(scaled_dataX[i:i + window_size])
+    npdata = np.array(X_data)
+
     predictions = []
     for d in npdata:
         input_data = d[np.newaxis, ...]
         prediction = model.predict(input_data, verbose=0)
-        predictions.append(prediction.flatten()[0])
+        sc = scalerY.inverse_transform(prediction).flatten()[0]
+        predictions.append(sc.flatten()[0])
     return predictions
 
-def gen_plot(timestamps, predictions, title):
+def gen_plot(timestamps, predictions, pdX1, title):
     _, (ax1) = plt.subplots(1, 1, figsize=(15, 10), sharex=True)
-    ax1.plot(timestamps, predictions, label='Прогн. Y1 +6мес')
+    Y = pdX1.iloc[:, 1]
+    ax1.plot(timestamps[-len(predictions):], predictions, label='Прогн. Y1 +6мес')
+    ax1.plot(timestamps[:len(Y)], Y, label='Фактические значения Y')
+    ax1.axvline(x=timestamps[len(Y)-1], color='red', linestyle='--', label=f'Граница трениров. данных ({timestamps[len(Y)-1].strftime("%d.%m.%Y")})')
     ax1.set_title(f'Модель для "{title}". Окно={window_size}мес. Прогноз={steps_ahead} мес.')
     ax1.legend()
     ax1.set_ylabel(f"{title}")
@@ -89,14 +99,16 @@ async def predict(file, model, title, title_ru):
     file_object = io.BytesIO(contents)
 
     pdX1 = pd.read_csv(file_object)
-    np_data = prepare_data(pdX1)
     try:
-        predictions = prediction(model, np_data)
+        predictions = prediction(model, pdX1)
     except:
         raise HTTPException(status_code=400, detail=f"Invalid input shape for {title}")
 
-    timestamps = [parse_date(d) for d in pdX1.iloc[window_size+start_ahead:-1, 0]]
-    image_data = gen_plot(timestamps, predictions, title_ru)
+    timestamps = [parse_date(d) for d in pdX1.iloc[:-1, 0]]
+    for i in range(steps_ahead):
+        timestamps.append(timestamps[-1] + relativedelta(months=+1))
+
+    image_data = gen_plot(timestamps, predictions, pdX1, title_ru)
     return {
 #        'predictions': predictions,
         'graph': image_data
