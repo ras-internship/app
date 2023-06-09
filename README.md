@@ -17,3 +17,8 @@ $ docker run -d --rm \
 ```sh
 $ uvicorn app:app --reload
 ```
+
+## Проверка API через curl
+```sh
+$ curl -F "file=@vvp.csv" http://localhost:8080/vvp
+```
