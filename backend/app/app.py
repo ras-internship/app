@@ -33,7 +33,6 @@ model_vvp = tf.keras.models.load_model("model_vvp.h5")
 model_inf = tf.keras.models.load_model("model_inf.h5")
 
 window_size = 12
-start_ahead = 5
 steps_ahead = 6
 
 def prediction(model, pdX1):
@@ -49,6 +48,7 @@ def prediction(model, pdX1):
     X_data = []
     for i in range(len(scaled_dataX) - window_size ):
         X_data.append(scaled_dataX[i:i + window_size])
+    X_data.append(scaled_dataX[-window_size:])
     npdata = np.array(X_data)
 
     predictions = []
@@ -104,13 +104,16 @@ async def predict(file, model, title, title_ru):
     except:
         raise HTTPException(status_code=400, detail=f"Invalid input shape for {title}")
 
-    timestamps = [parse_date(d) for d in pdX1.iloc[:-1, 0]]
-    for i in range(steps_ahead):
+    timestamps = [parse_date(d) for d in pdX1.iloc[:, 0]]
+    for _ in range(steps_ahead):
         timestamps.append(timestamps[-1] + relativedelta(months=+1))
 
     image_data = gen_plot(timestamps, predictions, pdX1, title_ru)
+    Y = pdX1.iloc[:, 1]
     return {
-#        'predictions': predictions,
+        'timestamps': [ datetime.strftime(dt, "%d.%m.%Y") for dt in timestamps],
+        'predictions': [str(p) for p in predictions],
+        'real': [ str(r) for r in Y],
         'graph': image_data
     }
 
